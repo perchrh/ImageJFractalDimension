@@ -5,6 +5,7 @@ The plugins were written by Jens Bache-Wiig and myself and are free software in 
 Java 1.5 or later is required.
 
 To install the plugins: 
+
  - Compile the Java files with ImageJ(.jar) on the classpath
  - Copy the resulting .class files to the ImageJ plugin folder.
 
