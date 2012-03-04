@@ -10,7 +10,7 @@ Java 1.5 or later is required.
 
 To install the plugins, copy the .class files to the ImageJ plugin folder. 
 
-Fractal Count (FractalCount_.java)
+Fractal Count (FractalCount\_.java)
 ----------------------------------
 
 Estimates the fractal dimension of 2D and 3D binary images. 
@@ -19,7 +19,7 @@ Supports offsets for added reliability and reproduceability of results.
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/FractalCount_.class)
 
 
-Fractal Count for maps, improved SDBC (MapFractalCount_.java)
+Fractal Count for maps, improved SDBC (MapFractalCount\_.java)
 -------------------------------------------------------------
 
 Estimates the fractal dimension of 2D greylevel images interpreted as as topographic surface (maps).
@@ -28,14 +28,14 @@ Algorithm based on SDBC, see documentation and source code for more details.
 
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/MapFractalCount_.class)
 
-[Documentation](mapfractalcount.html)
+[Documentation](http://github.com/perchrh/ImageJFractalDimension/blob/master/mapfractalcount.html)
 
 
-Fractal Count for maps, original SDBC (SDBC_.java)
+Fractal Count for maps, original SDBC (SDBC\_.java)
 --------------------------------------------------
 
 The original SDBC algorithm.
 
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/SDBC_.class)
 
-[Documentation](sdbc.html)
+[Documentation](http://github.com/perchrh/ImageJFractalDimension/blob/master/sdbc.html)
