@@ -28,7 +28,7 @@ Algorithm based on SDBC, see documentation and source code for more details.
 
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/MapFractalCount_.class)
 
-[Documentation](http://github.com/perchrh/ImageJFractalDimension/blob/master/mapfractalcount.html)
+[Documentation](http://www.pvv.org/~perchrh/imagej/mapfractalcount.html)
 
 
 Fractal Count for maps, original SDBC (SDBC\_.java)
@@ -38,4 +38,4 @@ The original SDBC algorithm.
 
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/SDBC_.class)
 
-[Documentation](http://github.com/perchrh/ImageJFractalDimension/blob/master/sdbc.html)
+[Documentation](http://www.pvv.org/~perchrh/imagej/sdbc.html)
