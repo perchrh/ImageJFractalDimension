@@ -9,6 +9,7 @@
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
+import ij.gui.Plot;
 import ij.gui.PlotWindow;
 import ij.measure.CurveFitter;
 import ij.plugin.filter.PlugInFilter;
@@ -16,315 +17,311 @@ import ij.process.ImageProcessor;
 import ij.util.Tools;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class FractalCount_ implements PlugInFilter {
 
-	ImagePlus imRef;
+    private ImagePlus imRef;
 
-	boolean noGo = false;
+    private boolean noGo = false;
 
-	final int autoDiv = 4;
+    private final static int AUTO_DIV = 4;
 
-	// User-changeable defaults :
-	boolean plotGraph = true;
+    // User-changeable defaults:
+    private boolean plotGraph = true;
 
-	boolean verboseOutput = false;
+    private boolean verboseOutput = false;
 
-	int threshold = 70;
+    private int threshold = 70;
 
-	int maxBox = 24;
+    private int maxBox = 24;
 
-	int minBox = 6;
+    private int minBox = 6;
 
-	double divBox = 1.2;
+    private double divBox = 1.2;
 
-	int numOffsets = 1;
+    private int numOffsets = 3;
 
-	boolean autoParam = true;
+    private boolean autoParam = true;
 
-	public int setup(String arg, ImagePlus imp) {
-		imRef = imp;
+    public int setup(String arg, ImagePlus imp) {
+        imRef = imp;
 
-		if (arg.equals("about")) {
-			showAbout();
-			return DONE;
-		}
+        if (arg.equals("about")) {
+            showAbout();
+            return DONE;
+        }
 
-		getParams();
+        getParams();
 
-		return DOES_8G;
-	}
+        return DOES_8G;
+    }
 
-	private void getParams() {
+    private void getParams() {
+        GenericDialog gd = new GenericDialog("Calculate fractal dimension");
 
-		GenericDialog gd = new GenericDialog("Calculate fractal dimension");
+        gd.addCheckbox("Plot results", plotGraph);
+        gd.addCheckbox("Verbose output", verboseOutput);
+        gd.addCheckbox("Automatic start box size", autoParam);
+        gd.addMessage("");
+        gd.addNumericField("Threshold", threshold, 0);
+        gd.addNumericField("Start box size", maxBox, 0);
+        gd.addNumericField("Min box size", minBox, 0);
+        gd.addNumericField("Box division factor", divBox, 1);
+        gd.addNumericField("Number of translations", numOffsets, 0);
 
-		gd.addCheckbox("Plot results", plotGraph);
-		gd.addCheckbox("Verbose output", verboseOutput);
-		gd.addCheckbox("Automatic start box size", autoParam);
-		gd.addMessage("");
-		gd.addNumericField("Threshold", threshold, 0);
-		gd.addNumericField("Start box size", maxBox, 0);
-		gd.addNumericField("Min box size", minBox, 0);
-		gd.addNumericField("Box division factor", divBox, 1);
-		gd.addNumericField("Number of translations", numOffsets, 0);
+        gd.showDialog();
 
-		gd.showDialog();
+        if (gd.wasCanceled()) {
+            if (imRef != null) {
+                imRef.unlock();
+                imRef = null;
+            }
+            noGo = true;
+        }
 
-		if (gd.wasCanceled()) {
-			if (imRef != null)
-				imRef.unlock();
-			noGo = true;
-		}
+        plotGraph = gd.getNextBoolean();
+        verboseOutput = gd.getNextBoolean();
+        autoParam = gd.getNextBoolean();
 
-		plotGraph = gd.getNextBoolean();
-		verboseOutput = gd.getNextBoolean();
-		autoParam = gd.getNextBoolean();
+        threshold = (int) gd.getNextNumber();
+        maxBox = (int) gd.getNextNumber();
+        minBox = (int) gd.getNextNumber();
+        divBox = gd.getNextNumber();
+        numOffsets = (int) gd.getNextNumber();
+        if (numOffsets < 1) {
+            IJ.log("Number of offsets must be at least 1. Please select another value");
+            noGo = true;
+        }
+    }
 
-		threshold = (int) gd.getNextNumber();
-		maxBox = (int) gd.getNextNumber();
-		minBox = (int) gd.getNextNumber();
-		divBox = gd.getNextNumber();
-		numOffsets = (int) gd.getNextNumber();
-		if (numOffsets < 1) {
-			IJ
-					.write("Number of offsets must be at least 1. Please select another value");
-			noGo = true;
-		}
+    public void run(ImageProcessor ip) {
+        if (noGo) {
+            return;
+        }
 
-	}
+        // Fetch data
+        final int width = ip.getWidth();
+        final int height = ip.getHeight();
+        final int depth = imRef.getStackSize();
 
-	public void run(ImageProcessor ip) {
+        if (width <= 0 || height <= 0 || depth <= 0) {
+            IJ.log("\nNo black pixels in image. Dimension not defined."
+                    + "\nThis can be caused by an empty image or a"
+                    + "\n wrong threshold value.");
+            return;
+        }
 
-		if (noGo)
-			return;
+        if (autoParam) {
+            maxBox = Math.max(width, Math.max(height, depth)) / AUTO_DIV;
+            if (verboseOutput) {
+                IJ.log("Automatic max box size " + maxBox + " selected");
+            }
+        }
 
-		try {
-			// Fetch data
-			final int width = ip.getWidth();
-			final int height = ip.getHeight();
-			final int depth = imRef.getStackSize();
+        IJ.showStatus("Estimating dimension..");
 
-			if (width <= 0 || height <= 0 || depth <= 0) {
-				IJ.write("\nNo black pixels in image. Dimension not defined."
-						+ "\nThis can be caused by an empty image or a"
-						+ "\n wrong threshold value.");
-				return;
-			}
+        // Start timer
+        long startTime = System.currentTimeMillis();
 
-			if (autoParam) {
-				maxBox = Math.max(width, Math.max(height, depth)) / autoDiv;
-				if (verboseOutput) {
-					IJ.write("Automatic max box size " + maxBox + " selected");
-				}
-			}
+        // Do the box count
+        List<Long> xList = new ArrayList<Long>();
+        List<Long> yList = new ArrayList<Long>();
+        doBoxCount(width, height, depth, xList, yList);
 
-			// Create variables we need and set them
-			int bestCount; // keep track of best count so far
-			int count = 0; // current count
-			ArrayList<Double> xList = new ArrayList<Double>();
-			ArrayList<Double> yList = new ArrayList<Double>();
-			int xPos, yPos, zPos, yPart;
-			int xGrid, yGrid, zGrid;
-			int xStart, yStart, zStart;
-			int xEnd, yEnd, zEnd;
-			IJ.showStatus("Estimating dimension..");
+        if (verboseOutput) {
+            IJ.log("\nTime used: "
+                    + (System.currentTimeMillis() - startTime) / 1000.0
+                    + "seconds \n");
+        }
 
-			// Start timer
-			long startTime = System.currentTimeMillis();
+        // Prepare estimation of fractal dimension
+        double[] boxSizes = new double[xList.size()];
+        double[] boxCountSums = new double[yList.size()];
+        for (int i = 0; i < boxSizes.length; i++) {
+            boxSizes[i] = -Math.log(xList.get(i));
+            boxCountSums[i] = Math.log(yList.get(i));
+        }
 
-			for (int boxSize = maxBox; boxSize >= minBox; boxSize /= divBox) {
-				if (verboseOutput) {
-					IJ.write("Current boxsize: " + boxSize);
-				}
+        if (verboseOutput) {
+            IJ.log("Used " + boxSizes.length
+                    + " different box sizes, from " + maxBox + " to "
+                    + minBox);
+            IJ.log("with a reduction rate of " + divBox + " and "
+                    + numOffsets + " translations of each box.");
+        }
 
-				bestCount = Integer.MAX_VALUE; // init count for this boxSize
+        if (boxSizes.length == 0) {
+            IJ.log("\nError: No boxes!\nMake sure that starting and ending box size and "
+                    + "\nreduction rate allow for at least one box size to exist!");
+            return;
+        }
 
-				final int increment = Math.max(1, boxSize / numOffsets);
+        if (plotGraph) {
+            CurveFitter cf = new CurveFitter(boxSizes, boxCountSums);
+            cf.doFit(CurveFitter.STRAIGHT_LINE);
+            double[] p = cf.getParams();
+            final String label = imRef.getTitle()
+                    + ": Dimension estimate: " + IJ.d2s(p[1], 4)
+                    + ": Settings: " + maxBox + ":" + minBox + ":" + divBox
+                    + ":" + numOffsets;
+            IJ.log(label);
 
-				for (int gridOffsetX = 0; (gridOffsetX < boxSize)
-						&& (gridOffsetX < width); gridOffsetX += increment) {
+            doPlotGraph(p, boxSizes, boxCountSums);
+        }
 
-					for (int gridOffsetY = 0; (gridOffsetY < boxSize)
-							&& (gridOffsetY < height); gridOffsetY += increment) {
 
-						for (int gridOffsetZ = 0; (gridOffsetZ < boxSize)
-								&& (gridOffsetZ < depth); gridOffsetZ += increment) {
+        if (imRef != null) {
+            imRef.unlock();
+        }
+    }
 
-							count = 0;
+    private void doBoxCount(int width, int height, int depth, List<Long> boxSizes, List<Long> boxCounts) {
+        long bestCount; // keeps track of best count so far
+        long count = 0; // current count
+        int xPos, yPos, zPos, yPart;
+        int xGrid, yGrid, zGrid;
+        int xStart, yStart, zStart;
+        int xEnd, yEnd, zEnd;
 
-							final int iMax = width + gridOffsetX;
-							final int jMax = height + gridOffsetY;
-							final int kMax = depth + gridOffsetZ;
+        for (int boxSize = maxBox; boxSize >= minBox; boxSize /= divBox) {
+            if (verboseOutput) {
+                String message = "Current boxsize: " + boxSize + " x " + boxSize;
+                if (depth > 1) {
+                    message += " x " + boxSize;
+                }
+                IJ.log(message);
+            }
 
-							// Iterate over box-grid
-							for (int i = 0; i <= iMax; i += boxSize) {
-								xGrid = -gridOffsetX + i;
-								for (int j = 0; j <= jMax; j += boxSize) {
-									yGrid = -gridOffsetY + j;
-									for (int k = 0; k <= kMax; k += boxSize) {
-										zGrid = -gridOffsetZ + k;
+            bestCount = Long.MAX_VALUE; // initial count for this boxSize
 
-										xStart = 0;
-										if (xGrid < 0) {
-											xStart = -xGrid;
-										}
-										if ((boxSize + xGrid) >= width) {
-											xEnd = Math.min(width,
-													(width - xGrid));
-										} else {
-											xEnd = boxSize;
-										}
+            final int increment = Math.max(1, boxSize / numOffsets);
 
-										yStart = 0;
-										if (yGrid < 0) {
-											yStart = -yGrid;
-										}
-										if ((boxSize + yGrid) >= height) {
-											yEnd = Math.min(height,
-													(height - yGrid));
-										} else {
-											yEnd = boxSize;
-										}
+            for (int gridOffsetX = 0; (gridOffsetX < boxSize)
+                    && (gridOffsetX < width); gridOffsetX += increment) {
 
-										zStart = 0;
-										if (zGrid < 0) {
-											zStart = -zGrid;
-										}
-										if ((boxSize + zGrid) >= depth) {
-											zEnd = Math.min(depth,
-													(depth - zGrid));
-										} else {
-											zEnd = boxSize;
-										}
+                for (int gridOffsetY = 0; (gridOffsetY < boxSize)
+                        && (gridOffsetY < height); gridOffsetY += increment) {
 
-										for (int x = xStart; x < xEnd; x++) {
-											xPos = x + xGrid;
+                    for (int gridOffsetZ = 0; (gridOffsetZ < boxSize)
+                            && (gridOffsetZ < depth); gridOffsetZ += increment) {
 
-											for (int y = yStart; y < yEnd; y++) {
-												yPos = (y + yGrid);
-												yPart = yPos * width;
+                        count = 0;
 
-												for (int z = zStart; z < zEnd; z++) {
-													zPos = z + zGrid;
+                        final int iMax = width + gridOffsetX;
+                        final int jMax = height + gridOffsetY;
+                        final int kMax = depth + gridOffsetZ;
 
-													// If pixel inside region,
-													// count it
+                        // Iterate over box-grid
+                        for (int i = 0; i <= iMax; i += boxSize) {
+                            xGrid = -gridOffsetX + i;
+                            for (int j = 0; j <= jMax; j += boxSize) {
+                                yGrid = -gridOffsetY + j;
+                                for (int k = 0; k <= kMax; k += boxSize) {
+                                    zGrid = -gridOffsetZ + k;
 
-													if ((0xff & ((byte[]) imRef
-															.getStack()
-															.getPixels(zPos + 1))[xPos
-															+ yPart]) >= threshold) {
-														count++;
-														z = x = y = boxSize; // stops
-																				// things
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-							if (count < bestCount) {
-								bestCount = count;
-							}
-						}
-					}
-				}
-				xList.add(new Double(boxSize));
-				yList.add(new Double(bestCount));
-			}
+                                    xStart = 0;
+                                    if (xGrid < 0) {
+                                        xStart = -xGrid;
+                                    }
+                                    if ((boxSize + xGrid) >= width) {
+                                        xEnd = Math.min(width, width - xGrid);
+                                    } else {
+                                        xEnd = boxSize;
+                                    }
 
-			if (verboseOutput) {
-				IJ.write("\nTime used: "
-						+ (System.currentTimeMillis() - startTime) / 1000.0
-						+ "seconds \n");
-			}
+                                    yStart = 0;
+                                    if (yGrid < 0) {
+                                        yStart = -yGrid;
+                                    }
+                                    if ((boxSize + yGrid) >= height) {
+                                        yEnd = Math.min(height, height - yGrid);
+                                    } else {
+                                        yEnd = boxSize;
+                                    }
 
-			double[] boxSizes = new double[xList.size()];
-			double[] boxCountSums = new double[yList.size()];
-			for (int i = 0; i < boxSizes.length; i++) {
-				boxSizes[i] = -Math.log((xList.get(i)).doubleValue());
-				boxCountSums[i] = Math.log((yList.get(i)).doubleValue());
-			}
+                                    zStart = 0;
+                                    if (zGrid < 0) {
+                                        zStart = -zGrid;
+                                    }
+                                    if ((boxSize + zGrid) >= depth) {
+                                        zEnd = Math.min(depth, depth - zGrid);
+                                    } else {
+                                        zEnd = boxSize;
+                                    }
 
-			if (verboseOutput) {
-				IJ.write("Used " + boxSizes.length
-						+ " different box sizes, from " + maxBox + " to "
-						+ minBox);
-				IJ.write("with a reduction rate of " + divBox + " and "
-						+ numOffsets + " translations of each box.");
-			}
+                                    for (int x = xStart; x < xEnd; x++) {
+                                        xPos = x + xGrid;
 
-			if (boxSizes.length == 0) {
-				IJ
-						.write("\nError: No boxes!\nMake sure that starting and ending box size and "
-								+ "\nreduction rate allow for at least one box size to exist!");
-				return;
-			}
+                                        for (int y = yStart; y < yEnd; y++) {
+                                            yPos = (y + yGrid);
+                                            yPart = yPos * width;
 
-			if (plotGraph) {
+                                            for (int z = zStart; z < zEnd; z++) {
+                                                zPos = z + zGrid;
 
-				CurveFitter cf = new CurveFitter(boxSizes, boxCountSums);
-				cf.doFit(CurveFitter.STRAIGHT_LINE);
-				double[] p = cf.getParams();
-				final String label = imRef.getTitle()
-						+ ": Dimension estimate: " + IJ.d2s(p[1], 4)
-						+ ": Settings: " + maxBox + ":" + minBox + ":" + divBox
-						+ ":" + numOffsets;
-				IJ.write(label);
+                                                // If there is a foreground pixel inside the box, count the box
+                                                int pixelValue = 0xff & ((byte[]) imRef
+                                                        .getStack()
+                                                        .getPixels(zPos + 1))[xPos + yPart];
+                                                if (pixelValue >= threshold) {
+                                                    count++;
+                                                    z = x = y = boxSize; // stop looking through this box
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
-				doPlotGraph(p, boxSizes, boxCountSums);
-			}
+                        if (count < bestCount) {
+                            bestCount = count;
+                        }
 
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+                    }
+                }
+            }
+            boxSizes.add((long) boxSize);
+            boxCounts.add(bestCount);
+        }
+    }
 
-		if (imRef != null)
-			imRef.unlock();
-	}
+    void doPlotGraph(double[] params, double[] boxSizes, double[] boxCountSums) {
+        final int samples = 100;
+        float[] px = new float[samples];
+        float[] py = new float[samples];
+        double[] a = Tools.getMinMax(boxSizes);
+        double xmin = a[0], xmax = a[1];
 
-	void doPlotGraph(double[] params, double[] boxSizes, double[] boxCountSums) {
+        a = Tools.getMinMax(boxCountSums);
+        double ymin = a[0], ymax = a[1];
+        final double inc = (xmax - xmin) / ((double) samples - 1);
+        double tmp = xmin;
 
-		final int samples = 100;
-		float[] px = new float[samples];
-		float[] py = new float[samples];
-		double[] a = Tools.getMinMax(boxSizes);
-		double xmin = a[0], xmax = a[1];
+        for (int i = 0; i < samples; i++) {
+            px[i] = (float) tmp;
+            tmp += inc;
+        }
+        for (int i = 0; i < samples; i++) {
+            py[i] = (float) CurveFitter.f(CurveFitter.STRAIGHT_LINE, params, px[i]);
+        }
+        a = Tools.getMinMax(py);
+        ymin = Math.min(ymin, a[0]);
+        ymax = Math.max(ymax, a[1]);
 
-		a = Tools.getMinMax(boxCountSums);
-		double ymin = a[0], ymax = a[1];
-		final double inc = (xmax - xmin) / ((double) samples - 1);
-		double tmp = xmin;
+        Plot plot = new Plot("Plot", "-log(box size)", "log(box count)", px, py);
+        plot.setLimits(xmin, xmax * 0.9, ymin, ymax * 1.1);
+        plot.addPoints(Tools.toFloat(boxSizes), Tools.toFloat(boxCountSums), PlotWindow.CIRCLE);
+        plot.addLabel(0.25, 0.25, "Slope: " + IJ.d2s(params[1], 4));
+        plot.draw();
+    }
 
-		for (int i = 0; i < samples; i++) {
-			px[i] = (float) tmp;
-			tmp += inc;
-		}
-		for (int i = 0; i < samples; i++) {
-			py[i] = (float) CurveFitter.f(CurveFitter.STRAIGHT_LINE, params,
-					px[i]);
-		}
-		a = Tools.getMinMax(py);
-		ymin = Math.min(ymin, a[0]);
-		ymax = Math.max(ymax, a[1]);
-		PlotWindow pw = new PlotWindow("Plot", "-log(box size)",
-				"log(box count)", px, py);
-		pw.setLimits(xmin, xmax * 0.9, ymin, ymax * 1.1);
-		pw.addPoints(Tools.toFloat(boxSizes), Tools.toFloat(boxCountSums),
-				PlotWindow.CIRCLE);
-		final String plotLabel = "Slope: " + IJ.d2s(params[1], 4);
-		pw.addLabel(0.25, 0.25, plotLabel);
-		pw.draw();
-	}
-
-	void showAbout() {
-		IJ
-				.showMessage(
-						"About FractalCount..",
-						"This plugin calculates the boxing dimension (an estimate of the fractal dimension) \n "
-								+ " of 2D and 3D images\n.");
-	}
+    void showAbout() {
+        IJ.showMessage(
+                "About FractalCount..",
+                "This plugin calculates the boxing dimension (an estimate of the fractal dimension) \n "
+                        + " of 2D and 3D images\n.");
+    }
 
 }
