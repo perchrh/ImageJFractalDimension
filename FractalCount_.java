@@ -36,7 +36,9 @@ public class FractalCount_ implements PlugInFilter {
 
     private int maxBox = 24;
 
-    private int minBox = 6;
+    private static final int DEFAULT_MIN_BOX = 6;
+
+    private int minBox = DEFAULT_MIN_BOX;
 
     private double divBox = 1.2;
 
@@ -114,6 +116,7 @@ public class FractalCount_ implements PlugInFilter {
 
         if (autoParam) {
             maxBox = Math.max(width, Math.max(height, depth)) / AUTO_DIV;
+            minBox = Math.min(DEFAULT_MIN_BOX, maxBox);
             if (verboseOutput) {
                 IJ.log("Automatic max box size " + maxBox + " selected");
             }
