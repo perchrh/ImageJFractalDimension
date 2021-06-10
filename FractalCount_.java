@@ -25,12 +25,14 @@ public class FractalCount_ implements PlugInFilter {
 
     private boolean noGo = false;
 
-    private final static int AUTO_DIV = 4;
+    private static final int AUTO_DIV = 4;
 
     // User-changeable defaults:
     private boolean plotGraph = true;
 
     private boolean verboseOutput = false;
+
+    private boolean showPlotCoordinates = false;
 
     private int threshold = 70;
 
@@ -64,6 +66,7 @@ public class FractalCount_ implements PlugInFilter {
 
         gd.addCheckbox("Plot results", plotGraph);
         gd.addCheckbox("Verbose output", verboseOutput);
+        gd.addCheckbox("Show plot coordinates", showPlotCoordinates);
         gd.addCheckbox("Automatic start box size", autoParam);
         gd.addMessage("");
         gd.addNumericField("Threshold", threshold, 0);
@@ -84,6 +87,7 @@ public class FractalCount_ implements PlugInFilter {
 
         plotGraph = gd.getNextBoolean();
         verboseOutput = gd.getNextBoolean();
+        showPlotCoordinates = gd.getNextBoolean();
         autoParam = gd.getNextBoolean();
 
         threshold = (int) gd.getNextNumber();
@@ -158,6 +162,14 @@ public class FractalCount_ implements PlugInFilter {
             IJ.log("\nError: No boxes!\nMake sure that starting and ending box size and "
                     + "\nreduction rate allow for at least one box size to exist!");
             return;
+        }
+
+        if (showPlotCoordinates) {
+            IJ.log("\nBox size + box count pairs, which are the basis for the estimate:");
+            for (int i = 0; i < xList.size(); i++) {
+                IJ.log(xList.get(i) + ", " + yList.get(i));
+            }
+            IJ.log("");
         }
 
         if (plotGraph) {
