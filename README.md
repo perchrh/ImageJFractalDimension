@@ -13,7 +13,7 @@ To install the plugins, copy the .class files to the ImageJ plugin folder.
 Fractal Count (FractalCount\_.java)
 ----------------------------------
 
-Estimates the fractal dimension of 2D and 3D binary images. 
+Estimates the fractal dimension of 2D and 3D binary images, by the boxing dimension. 
 Supports offsets for added reliability and reproduceability of results.
 
 [Ready to run plugin](http://www.pvv.org/~perchrh/imagej/FractalCount_.class)
